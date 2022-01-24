@@ -1,0 +1,66 @@
+version: '3.4'
+
+services:
+  transferdb:
+    container_name: transferdb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  rabbitmq:
+    container_name: rabbitmq
+    restart: always
+    ports:
+        - "5672:5672"
+        - "15672:15672"
+ 
+
+  processing.api:
+    container_name: processing.api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "ElasticConfiguration:Uri=http://elasticsearch:9200"
+      - "ProcessingDatabaseSettings:ConnectionString=mongodb://TransferDb:27017"
+      - "ProcessingDatabaseSettings:DatabaseName:TransferDb"
+      - "ProcessingDatabaseSettings:CollectionName:Transfers"      
+      - "EventBusSettings:HostAddress=amqp://guest:guest@rabbitmq:5672"
+      - "AccountSettings:Uri=https://acessoaccount.herokuapp.com/api"
+    depends_on:    
+      - rabbitmq
+      - transferdb      
+    ports:
+      - "8005:80"
+
+  transfer.api:
+    container_name: transfer.api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development    
+      - "EventBusSettings:HostAddress=amqp://guest:guest@rabbitmq:5672"
+    depends_on:
+      - transferdb        
+      - rabbitmq      
+    ports:
+      - "8002:80"
+
+  elasticsearch:
+    container_name: elasticsearch
+    environment:
+        - xpack.monitoring.enabled=true
+        - xpack.watcher.enabled=false
+        - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+        - discovery.type=single-node
+    ports:
+        - "9200:9200"
+    volumes:
+        - elasticsearch-data:/usr/share/elasticsearch/data   
+
+  kibana:
+    container_name: kibana
+    environment:        
+        - ELASTICSEARCH_URL=http://elasticsearch:9200
+    depends_on:
+        - elasticsearch
+    ports:
+        - "5601:5601"  
